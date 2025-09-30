@@ -1,0 +1,366 @@
+<!DOCTYPE html>
+<html lang="th">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Bomb Clicker</title>
+    <style>
+        body {
+            box-sizing: border-box;
+            margin: 0;
+            padding: 20px;
+            background-color: white;
+            font-family: 'Arial', sans-serif;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            min-height: 100vh;
+            position: relative;
+        }
+
+        .game-header {
+            text-align: center;
+            margin-bottom: 30px;
+        }
+
+        .game-title {
+            font-size: 3rem;
+            font-weight: bold;
+            color: #ff4444;
+            text-shadow: 2px 2px 4px rgba(0,0,0,0.3);
+            margin-bottom: 10px;
+        }
+
+        .score-display {
+            font-size: 1.5rem;
+            color: #333;
+            margin-bottom: 10px;
+        }
+
+        .timer-display {
+            font-size: 1.2rem;
+            color: #ff6600;
+            font-weight: bold;
+        }
+
+        .game-area {
+            width: 800px;
+            height: 600px;
+            border: 3px solid #333;
+            border-radius: 15px;
+            position: relative;
+            background: linear-gradient(45deg, #f0f0f0, #ffffff);
+            overflow: hidden;
+        }
+
+        .bomb {
+            position: absolute;
+            width: 60px;
+            height: 60px;
+            cursor: pointer;
+        }
+
+
+
+        .start-screen, .game-over-screen {
+            position: absolute;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            background: rgba(255, 255, 255, 0.95);
+            display: flex;
+            flex-direction: column;
+            justify-content: center;
+            align-items: center;
+            border-radius: 15px;
+        }
+
+        .start-button, .restart-button {
+            background: linear-gradient(45deg, #ff4444, #ff6666);
+            color: white;
+            border: none;
+            padding: 15px 30px;
+            font-size: 1.5rem;
+            border-radius: 10px;
+            cursor: pointer;
+            box-shadow: 0 4px 8px rgba(0,0,0,0.2);
+            transition: all 0.3s;
+        }
+
+        .start-button:hover, .restart-button:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 6px 12px rgba(0,0,0,0.3);
+        }
+
+        .final-score {
+            font-size: 2rem;
+            color: #ff4444;
+            margin-bottom: 20px;
+            font-weight: bold;
+        }
+
+        .instructions {
+            text-align: center;
+            margin-bottom: 30px;
+            color: #666;
+            line-height: 1.6;
+        }
+
+        @media (max-width: 900px) {
+            .game-area {
+                width: 90vw;
+                height: 60vh;
+            }
+            
+            .game-title {
+                font-size: 2rem;
+            }
+        }
+    </style>
+</head>
+<body>
+    <div class="game-header">
+        <h1 class="game-title">💣 Bomb Clicker 💣</h1>
+        <div class="score-display">คะแนน: <span id="score">0</span></div>
+        <div class="timer-display">เวลาที่เหลือ: <span id="timer">5.0</span> วินาที</div>
+    </div>
+
+    <div class="game-area" id="gameArea">
+        <div class="start-screen" id="startScreen">
+            <div class="instructions">
+                <h2>วิธีเล่น Bomb Clicker</h2>
+                <p>🎯 คลิกที่ระเบิดก่อนที่เวลาจะหมด (5 วินาที)</p>
+                <p>💥 ระเบิดจะเพิ่มขึ้นเรื่อยๆ ทำให้เกมยากขึ้น</p>
+                <p>⚡ ได้ 1 คะแนนทุกครั้งที่คลิกระเบิดสำเร็จ</p>
+                <p>💀 ถ้าไม่คลิกทัน = Game Over!</p>
+            </div>
+            <button class="start-button" onclick="startGame()">เริ่มเกม</button>
+        </div>
+
+        <div class="game-over-screen" id="gameOverScreen" style="display: none;">
+            <h2>Game Over!</h2>
+            <div class="final-score" id="finalScore">คะแนนรวม: 0</div>
+            <button class="restart-button" onclick="restartGame()">เล่นใหม่</button>
+        </div>
+    </div>
+
+    <script>
+        let gameState = {
+            isPlaying: false,
+            score: 0,
+            bombCount: 1,
+            timeLeft: 5.0,
+            bombs: [],
+            gameTimer: null,
+            countdownTimer: null
+        };
+
+        // สร้างเสียง pop (จำลองด้วย Web Audio API)
+        function createPopSound() {
+            const audioContext = new (window.AudioContext || window.webkitAudioContext)();
+            const oscillator = audioContext.createOscillator();
+            const gainNode = audioContext.createGain();
+            
+            oscillator.connect(gainNode);
+            gainNode.connect(audioContext.destination);
+            
+            oscillator.frequency.setValueAtTime(800, audioContext.currentTime);
+            oscillator.frequency.exponentialRampToValueAtTime(200, audioContext.currentTime + 0.1);
+            
+            gainNode.gain.setValueAtTime(0.3, audioContext.currentTime);
+            gainNode.gain.exponentialRampToValueAtTime(0.01, audioContext.currentTime + 0.1);
+            
+            oscillator.start(audioContext.currentTime);
+            oscillator.stop(audioContext.currentTime + 0.1);
+        }
+
+        // สร้างเพลงพื้นหลัง (จำลองด้วย Web Audio API)
+        function createBackgroundMusic() {
+            const audioContext = new (window.AudioContext || window.webkitAudioContext)();
+            const oscillator1 = audioContext.createOscillator();
+            const oscillator2 = audioContext.createOscillator();
+            const gainNode = audioContext.createGain();
+            
+            oscillator1.connect(gainNode);
+            oscillator2.connect(gainNode);
+            gainNode.connect(audioContext.destination);
+            
+            oscillator1.frequency.setValueAtTime(220, audioContext.currentTime);
+            oscillator2.frequency.setValueAtTime(330, audioContext.currentTime);
+            
+            oscillator1.type = 'sine';
+            oscillator2.type = 'triangle';
+            
+            gainNode.gain.setValueAtTime(0.1, audioContext.currentTime);
+            
+            oscillator1.start();
+            oscillator2.start();
+            
+            // เปลี่ยนโน้ตทุก 2 วินาที
+            setInterval(() => {
+                if (gameState.isPlaying) {
+                    const notes = [220, 247, 262, 294, 330, 349, 392];
+                    const randomNote1 = notes[Math.floor(Math.random() * notes.length)];
+                    const randomNote2 = notes[Math.floor(Math.random() * notes.length)];
+                    
+                    oscillator1.frequency.setValueAtTime(randomNote1, audioContext.currentTime);
+                    oscillator2.frequency.setValueAtTime(randomNote2, audioContext.currentTime);
+                }
+            }, 2000);
+            
+            return { oscillator1, oscillator2, gainNode };
+        }
+
+        let backgroundMusic = null;
+
+        function startGame() {
+            gameState.isPlaying = true;
+            gameState.score = 0;
+            gameState.bombCount = 1;
+            gameState.timeLeft = 5.0;
+            
+            document.getElementById('startScreen').style.display = 'none';
+            document.getElementById('gameOverScreen').style.display = 'none';
+            
+            // เริ่มเพลงพื้นหลัง
+            try {
+                backgroundMusic = createBackgroundMusic();
+            } catch (e) {
+                console.log('ไม่สามารถเล่นเสียงได้');
+            }
+            
+            spawnBombs();
+            startCountdown();
+        }
+
+        function spawnBombs() {
+            // ล้างระเบิดเก่า
+            gameState.bombs.forEach(bomb => bomb.element.remove());
+            gameState.bombs = [];
+            
+            // สร้างระเบิดใหม่
+            for (let i = 0; i < gameState.bombCount; i++) {
+                createBomb();
+            }
+        }
+
+        function createBomb() {
+            const gameArea = document.getElementById('gameArea');
+            const bomb = document.createElement('div');
+            bomb.className = 'bomb';
+            bomb.innerHTML = '💣';
+            bomb.style.fontSize = '50px';
+            
+            // ตำแหน่งสุ่ม
+            const maxX = gameArea.clientWidth - 60;
+            const maxY = gameArea.clientHeight - 60;
+            const x = Math.random() * maxX;
+            const y = Math.random() * maxY;
+            
+            bomb.style.left = x + 'px';
+            bomb.style.top = y + 'px';
+            
+            bomb.onclick = () => clickBomb(bomb);
+            
+            gameArea.appendChild(bomb);
+            gameState.bombs.push({ element: bomb, clicked: false });
+        }
+
+        function clickBomb(bombElement) {
+            if (!gameState.isPlaying) return;
+            
+            // เล่นเสียง pop
+            try {
+                createPopSound();
+            } catch (e) {
+                console.log('ไม่สามารถเล่นเสียงได้');
+            }
+            
+            // หาระเบิดในอาร์เรย์และทำเครื่องหมายว่าคลิกแล้ว
+            const bombData = gameState.bombs.find(b => b.element === bombElement);
+            if (bombData) {
+                bombData.clicked = true;
+            }
+            
+            // ซ่อนระเบิดที่คลิกแล้ว
+            bombElement.style.display = 'none';
+            
+            // เพิ่มคะแนน
+            gameState.score++;
+            document.getElementById('score').textContent = gameState.score;
+            
+            // ตรวจสอบว่าคลิกระเบิดครบหมดแล้วหรือไม่
+            const allClicked = gameState.bombs.every(bomb => bomb.clicked);
+            if (allClicked) {
+                // เพิ่มจำนวนระเบิดและเริ่มรอบใหม่
+                gameState.bombCount++;
+                gameState.timeLeft = 5.0;
+                
+                setTimeout(() => {
+                    spawnBombs();
+                    startCountdown();
+                }, 500);
+            }
+        }
+
+        function startCountdown() {
+            clearInterval(gameState.countdownTimer);
+            
+            gameState.countdownTimer = setInterval(() => {
+                gameState.timeLeft -= 0.1;
+                document.getElementById('timer').textContent = gameState.timeLeft.toFixed(1);
+                
+                if (gameState.timeLeft <= 0) {
+                    gameOver();
+                }
+            }, 100);
+        }
+
+        function gameOver() {
+            gameState.isPlaying = false;
+            clearInterval(gameState.countdownTimer);
+            
+            // หยุดเพลงพื้นหลัง
+            if (backgroundMusic) {
+                try {
+                    backgroundMusic.oscillator1.stop();
+                    backgroundMusic.oscillator2.stop();
+                } catch (e) {
+                    console.log('ไม่สามารถหยุดเสียงได้');
+                }
+            }
+            
+            // แสดงหน้าจอ Game Over
+            document.getElementById('finalScore').textContent = `คะแนนรวม: ${gameState.score}`;
+            document.getElementById('gameOverScreen').style.display = 'flex';
+            
+            // ล้างระเบิดทั้งหมด
+            gameState.bombs.forEach(bomb => bomb.element.remove());
+            gameState.bombs = [];
+        }
+
+        function restartGame() {
+            startGame();
+        }
+
+        // อัปเดตการแสดงผลเมื่อเปลี่ยนขนาดหน้าจอ
+        window.addEventListener('resize', () => {
+            if (gameState.isPlaying) {
+                // ปรับตำแหน่งระเบิดใหม่ถ้าจำเป็น
+                gameState.bombs.forEach(bombData => {
+                    const gameArea = document.getElementById('gameArea');
+                    const maxX = gameArea.clientWidth - 60;
+                    const maxY = gameArea.clientHeight - 60;
+                    
+                    const currentX = parseInt(bombData.element.style.left);
+                    const currentY = parseInt(bombData.element.style.top);
+                    
+                    if (currentX > maxX) bombData.element.style.left = maxX + 'px';
+                    if (currentY > maxY) bombData.element.style.top = maxY + 'px';
+                });
+            }
+        });
+    </script>
+<script>(function(){function c(){var b=a.contentDocument||a.contentWindow.document;if(b){var d=b.createElement('script');d.innerHTML="window.__CF$cv$params={r:'987434b3515fd03c',t:'MTc1OTI0MDQwMC4wMDAwMDA='};var a=document.createElement('script');a.nonce='';a.src='/cdn-cgi/challenge-platform/scripts/jsd/main.js';document.getElementsByTagName('head')[0].appendChild(a);";b.getElementsByTagName('head')[0].appendChild(d)}}if(document.body){var a=document.createElement('iframe');a.height=1;a.width=1;a.style.position='absolute';a.style.top=0;a.style.left=0;a.style.border='none';a.style.visibility='hidden';document.body.appendChild(a);if('loading'!==document.readyState)c();else if(window.addEventListener)document.addEventListener('DOMContentLoaded',c);else{var e=document.onreadystatechange||function(){};document.onreadystatechange=function(b){e(b);'loading'!==document.readyState&&(document.onreadystatechange=e,c())}}}})();</script></body>
+</html>
